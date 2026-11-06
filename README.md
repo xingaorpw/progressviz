@@ -109,7 +109,51 @@ python -m progressviz serve runs/demo.jsonl
 
 ---
 
-## 命令
+## 用法
+
+### 接上真实的模型
+
+```bash
+progressviz proxy --upstream https://api.openai.com --store runs/session.jsonl
+```
+
+然后把调用方的 `base_url` 指过去，其它什么都不用改：
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://127.0.0.1:8787/v1", api_key="sk-...")
+resp = client.chat.completions.create(
+    model="gpt-4o-mini",
+    stream=True,
+    messages=[{"role": "user", "content": "修复 /api/feed 的条数 bug"}],
+)
+for chunk in resp:
+    ...  # 你的代码完全不用动
+```
+
+代理把字节原样转给客户端，同时在终端打印：
+
+```
+◆ 思考  用户报了两个现象，方向相反，说明同一段逻辑的两个分支都有问题。
+```python
+need = max(0, k - len(stored))
+```
+⚙ run_tests
+测试通过了，49 个用例全绿。
+   token  in 1,840 · out 427 · 合计 2,267
+✓ 完成  1 个工具调用 · 2,267 token
+```
+
+### 事后回放
+
+```bash
+progressviz render runs/session.jsonl        # 终端重放
+progressviz serve  runs/session.jsonl        # 浏览器回放 http://127.0.0.1:8000
+progressviz summary runs/session.jsonl       # 只出统计
+```
+
+### 全部命令
 
 ```bash
 progressviz demo                                    # 零配置演示
@@ -117,12 +161,6 @@ progressviz proxy --upstream https://api.openai.com # 启动代理
 progressviz render runs/session.jsonl               # 终端重放
 progressviz summary runs/session.jsonl              # 统计
 progressviz serve runs/session.jsonl --port 8000    # Web 回放
-```
-
-用代理时，把调用方的 `base_url` 指过去：
-
-```python
-client = OpenAI(base_url="http://127.0.0.1:8787/v1", api_key="...")
 ```
 
 ---

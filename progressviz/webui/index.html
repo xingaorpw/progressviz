@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Progress Viz · 回放</title>
+<style>
+  :root {
+    --bg: #eaf0f9;
+    --glow: #d8e6ff;
+    --surface: #ffffff;
+    --surface-2: #f6f9fe;
+    --border: #dde5f2;
+    --border-2: #c9d5e8;
+    --fg: #16202e;
+    --dim: #5b6879;
+    --dimmer: #6f7c8e;
+    --think: #7c3aed;
+    --text: #2563eb;
+    --tool: #0e7490;
+    --ok: #15803d;
+    --warn: #b45309;
+    --shadow: 0 1px 2px rgba(18,38,72,.05), 0 8px 24px rgba(18,38,72,.09);
+    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: radial-gradient(900px 520px at 12% -8%, var(--glow), transparent 60%), var(--bg);
+    color: var(--fg);
+    font: 14px/1.65 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 14px;
+    padding: 15px 26px; background: var(--surface);
+    border-bottom: 1px solid var(--border); box-shadow: var(--shadow);
+  }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 650; font-size: 15px; }
+  .mark {
+    width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center;
+    background: linear-gradient(135deg, #4f8cff, #22c55e); color: #fff;
+    font-size: 13px; font-weight: 700; box-shadow: 0 3px 10px rgba(59,130,246,.32);
+  }
+  .brand small { color: var(--dimmer); font-weight: 400; }
+  .spacer { flex: 1; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px;
+    border-radius: 999px; font-size: 12px; font-weight: 600;
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--dim);
+  }
+  .pill.live { color: var(--text); border-color: #c3d8ff; background: #e0ebff; }
+  .pill.done { color: var(--ok); border-color: #b8e8c9; background: #dcfce7; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .pill.live .dot { animation: pulse 1.3s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  .metric { font-variant-numeric: tabular-nums; }
+  .metric b { font-size: 15px; font-weight: 650; }
+  .metric i { font-style: normal; font-size: 11px; color: var(--dimmer); margin-left: 4px; }
+  main { flex: 1 1 auto; display: grid; grid-template-columns: 380px 1fr; min-height: 0; }
+  aside { border-right: 1px solid var(--border); overflow-y: auto; padding: 16px 12px 40px; }
+  section { overflow-y: auto; padding: 24px 30px 60px; min-width: 0; }
+  aside::-webkit-scrollbar, section::-webkit-scrollbar { width: 9px; }
+  aside::-webkit-scrollbar-thumb, section::-webkit-scrollbar-thumb {
+    background: var(--border-2); border-radius: 5px; border: 2px solid transparent; background-clip: padding-box;
+  }
+  .step {
+    display: flex; gap: 11px; padding: 10px 12px; border-radius: 11px;
+    border: 1px solid transparent; cursor: pointer; transition: .15s;
+  }
+  .step:hover { background: var(--surface); border-color: var(--border); }
+  .step.sel { background: var(--surface); border-color: var(--border-2); box-shadow: var(--shadow); }
+  .ico {
+    flex: 0 0 20px; width: 20px; height: 20px; margin-top: 1px; border-radius: 50%;
+    display: grid; place-items: center; font-size: 10px; font-weight: 700;
+    border: 1.5px solid currentColor; background: var(--surface);
+  }
+  .step[data-k="thinking"] .ico { color: var(--think); }
+  .step[data-k="text"] .ico { color: var(--text); }
+  .step[data-k="tool"] .ico { color: var(--tool); }
+  .step .lbl { font-size: 13px; color: var(--fg); }
+  .step .sub { font-size: 11px; color: var(--dimmer); font-family: var(--mono); }
+  .step .sub em { font-style: normal; color: var(--warn); }
+  .head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .head h2 { margin: 0; font-size: 15px; font-weight: 650; }
+  .tag {
+    font-size: 11px; font-family: var(--mono); padding: 3px 9px; border-radius: 6px;
+    background: var(--surface); border: 1px solid var(--border); color: var(--dim);
+  }
+  pre {
+    margin: 0; padding: 18px 20px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; font-family: var(--mono); font-size: 12.5px; line-height: 1.8;
+    white-space: pre-wrap; word-break: break-word; color: #33415a; box-shadow: var(--shadow);
+  }
+  pre.think { color: var(--think); background: #fbf8ff; border-color: #e9e0fb; }
+  .empty { color: var(--dimmer); font-size: 13px; padding: 40px 0; text-align: center; }
+  footer {
+    flex: 0 0 auto; display: flex; gap: 22px; padding: 12px 26px;
+    border-top: 1px solid var(--border); background: var(--surface);
+    font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums;
+  }
+  footer b { color: var(--fg); font-weight: 650; }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; grid-template-rows: 230px 1fr; }
+    aside { border-right: 0; border-bottom: 1px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><span class="mark">✦</span>Progress Viz <small>回放</small></div>
+  <div class="spacer"></div>
+  <div class="pill" id="status"><span class="dot"></span><span id="st">连接中</span></div>
+  <div class="metric"><b id="tok">0</b><i>token</i></div>
+  <div class="metric"><b id="cnt">0</b><i>事件</i></div>
+</header>
+
+<main>
+  <aside id="list"></aside>
+  <section id="detail">
+    <div class="head"><h2 id="dTitle">等待事件</h2><div class="tag" id="dTag">idle</div></div>
+    <pre id="dBody" class="empty">正在从 /api/events 读取…</pre>
+  </section>
+</main>
+
+<footer>
+  <span>步骤 <b id="fSteps">0</b></span>
+  <span>工具调用 <b id="fTools">0</b></span>
+  <span>token <b id="fTok">0</b></span>
+  <span class="spacer"></span>
+  <span id="fSrc">usage</span>
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const steps = [];       // {kind, title, body, tokens, tools}
+let current = null;
+let totalTokens = 0;
+let tokenSource = 'usage';
+let selected = -1;
+
+function push(kind, title) {
+  current = { kind, title, body: '', tokens: 0 };
+  steps.push(current);
+}
+
+function feed(ev) {
+  switch (ev.kind) {
+    case 'thinking':
+      if (!current || current.kind !== 'thinking') push('thinking', '思考');
+      current.body += ev.text;
+      break;
+    case 'text':
+      if (!current || current.kind !== 'text') push('text', '输出');
+      current.body += ev.text;
+      break;
+    case 'tool':
+      push('tool', ev.name || 'tool');
+      current.body = '调用工具：' + (ev.name || '');
+      break;
+    case 'usage':
+      totalTokens = (ev.meta && ev.meta.total) || ev.tokens || 0;
+      tokenSource = 'usage（上游给的精确值）';
+      break;
+    case 'done':
+      if (ev.meta && ev.meta.estimated && !(ev.meta.usage)) {
+        totalTokens = ev.meta.estimated;
+        tokenSource = '估算（上游没有返回 usage）';
+      }
+      break;
+  }
+}
+
+function render() {
+  const list = $('list');
+  list.innerHTML = steps.map((s, i) => `
+    <div class="step ${i === selected ? 'sel' : ''}" data-k="${s.kind}" data-i="${i}">
+      <div class="ico">${s.kind === 'thinking' ? '◆' : s.kind === 'tool' ? '⚙' : '✎'}</div>
+      <div>
+        <div class="lbl">${esc(s.title)}</div>
+        <div class="sub">${s.body.length} 字符${s.kind === 'tool' ? '<em> · 已执行</em>' : ''}</div>
+      </div>
+    </div>`).join('') || '<div class="empty">还没有事件</div>';
+
+  list.querySelectorAll('.step').forEach(n =>
+    n.addEventListener('click', () => select(Number(n.dataset.i))));
+
+  $('fSteps').textContent = steps.length;
+  $('fTools').textContent = steps.filter(s => s.kind === 'tool').length;
+  $('tok').textContent = totalTokens.toLocaleString();
+  $('fTok').textContent = totalTokens.toLocaleString();
+  $('fSrc').textContent = tokenSource;
+}
+
+function select(i) {
+  selected = i;
+  const s = steps[i];
+  if (!s) return;
+  $('dTitle').textContent = s.title;
+  $('dTag').textContent = s.kind;
+  const body = $('dBody');
+  body.className = s.kind === 'thinking' ? 'think' : '';
+  body.textContent = s.body || '（无内容）';
+  render();
+}
+
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// 不用 EventSource：它在连接关闭后会自动重连，导致整段事件被重放两遍。
+// 用 fetch + reader 手动读流，读完就是读完，没有第二次。
+async function consume() {
+  let count = 0;
+  try {
+    const resp = await fetch('/api/events', { cache: 'no-store' });
+    if (!resp.ok || !resp.body) throw new Error('HTTP ' + resp.status);
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+
+      const parts = buf.split('\n\n');
+      buf = parts.pop();
+
+      for (const part of parts) {
+        const lines = part.split('\n');
+        const name = (lines.find(l => l.startsWith('event:')) || '').slice(6).trim();
+        const data = lines.filter(l => l.startsWith('data:'))
+          .map(l => l.slice(5).trim()).join('\n');
+
+        if (name === 'end') { finish(); return; }
+        if (!data) continue;
+
+        count += 1;
+        $('cnt').textContent = count;
+        try { feed(JSON.parse(data)); } catch (_) { continue; }
+        render();
+        select(selected === -1 ? steps.length - 1 : selected);
+      }
+    }
+    finish();
+  } catch (err) {
+    $('status').className = 'pill';
+    $('st').textContent = '读取失败';
+    console.error(err);
+  }
+}
+
+function finish() {
+  $('status').className = 'pill done';
+  $('st').textContent = '回放结束';
+  render();
+}
+
+$('status').className = 'pill live';
+$('st').textContent = '回放中';
+render();
+consume();
+</script>
+</body>
+</html>

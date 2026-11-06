@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "progressviz"
+version = "0.1.0"
+description = "把 AI 的工作过程变成能看的进度：实时看到每一步、随时中断、跑完知道钱花在哪"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "xingaorpw" }]
+keywords = ["ai", "agent", "llm", "observability", "streaming", "sse", "cli"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Debuggers",
+  "Topic :: System :: Monitoring",
+]
+
+[project.scripts]
+progressviz = "progressviz.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/xingaorpw/progressviz"
+Issues = "https://github.com/xingaorpw/progressviz/issues"
+Changelog = "https://github.com/xingaorpw/progressviz/blob/main/CHANGELOG.md"
+
+[tool.setuptools]
+packages = ["progressviz"]
+
+[tool.setuptools.package-data]
+progressviz = ["webui/*.html"]

@@ -1,0 +1,977 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Progress Viz · 原型 v3</title>
+<style>
+  /* ============================================================ 主题 */
+  :root {
+    --radius: 14px;
+    --mono: ui-monospace, "Cascadia Mono", "Consolas", monospace;
+
+    /* 亮色（默认） */
+    --bg: #eaf0f9;
+    --bg-glow-1: #d8e6ff;
+    --bg-glow-2: #d9f7ea;
+    --surface: #ffffff;
+    --surface-2: #f6f9fe;
+    --border: #dde5f2;
+    --border-strong: #c9d5e8;
+    --fg: #16202e;
+    --dim: #5b6879;
+    --dimmer: #6f7c8e;
+    --accent: #15803d;
+    --accent-soft: #dcfce7;
+    --run: #2563eb;
+    --run-soft: #e0ebff;
+    --warn: #b45309;
+    --warn-soft: #fff4e5;
+    --warn-border: #f6d5ae;
+    --err: #dc2626;
+    --err-soft: #ffecec;
+    --shadow: 0 1px 2px rgba(18, 38, 72, .05), 0 8px 24px rgba(18, 38, 72, .09);
+    --shadow-sm: 0 1px 3px rgba(18, 38, 72, .07);
+    --code-bg: #f8fafd;
+    --code-fg: #33415a;
+    --track: #e7ecf6;
+    --bar: #93b4f5;
+    --bar-top: #f0a94b;
+    --header-bg: rgba(255, 255, 255, .84);
+  }
+
+  [data-theme="dark"] {
+    --bg: #0e1420;
+    --bg-glow-1: #17253d;
+    --bg-glow-2: #10241c;
+    --surface: #151c2a;
+    --surface-2: #1a2233;
+    --border: #232d40;
+    --border-strong: #2f3b52;
+    --fg: #e9eef7;
+    --dim: #9aa7bb;
+    --dimmer: #7f8ca1;
+    --accent: #4ade80;
+    --accent-soft: #12301f;
+    --run: #60a5fa;
+    --run-soft: #132238;
+    --warn: #fbbf24;
+    --warn-soft: #221c0d;
+    --warn-border: #4a3c14;
+    --err: #f87171;
+    --err-soft: #2a1416;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 14px 40px rgba(0, 0, 0, .35);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .3);
+    --code-bg: #10161f;
+    --code-fg: #c3cfdf;
+    --track: #1e2739;
+    --bar: #3d6ea8;
+    --bar-top: #c08a2e;
+    --header-bg: rgba(21, 28, 42, .84);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+
+  body {
+    background:
+      radial-gradient(900px 520px at 12% -8%, var(--bg-glow-1) 0%, transparent 62%),
+      radial-gradient(700px 420px at 92% 4%, var(--bg-glow-2) 0%, transparent 58%),
+      var(--bg);
+    color: var(--fg);
+    font: 14px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: background .3s, color .3s;
+  }
+
+  /* ---------- 顶栏 ---------- */
+  header {
+    flex: 0 0 auto;
+    padding: 16px 26px 0;
+    background: var(--header-bg);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding-bottom: 15px;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 15px;
+    font-weight: 650;
+    white-space: nowrap;
+  }
+
+  .brand .mark {
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #4f8cff, #22c55e);
+    box-shadow: 0 3px 10px rgba(59, 130, 246, .32);
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    flex: 0 0 auto;
+  }
+
+  .brand span { color: var(--dimmer); font-weight: 400; margin-left: 6px; }
+
+  .spacer { flex: 1; }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--dim);
+    white-space: nowrap;
+  }
+
+  .pill.running { color: var(--run); border-color: #c3d8ff; background: var(--run-soft); }
+  .pill.done    { color: var(--accent); border-color: #b8e8c9; background: var(--accent-soft); }
+  .pill.aborted,
+  .pill.paused  { color: var(--warn); border-color: var(--warn-border); background: var(--warn-soft); }
+
+  [data-theme="dark"] .pill.running { border-color: #24435f; }
+  [data-theme="dark"] .pill.done { border-color: #1e4a2c; }
+
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .pill.running .dot { animation: pulse 1.4s ease-in-out infinite; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: .35; transform: scale(.8); }
+  }
+
+  .metric {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .metric b { font-size: 15px; font-weight: 650; }
+  .metric i { font-style: normal; font-size: 11px; color: var(--dimmer); }
+
+  button {
+    font: inherit;
+    font-size: 13px;
+    color: var(--fg);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 9px;
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: .16s;
+    box-shadow: var(--shadow-sm);
+  }
+
+  button:hover { background: var(--surface-2); border-color: var(--bar); }
+  button:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+  button.danger { color: var(--err); border-color: #f3c9c9; background: var(--surface); }
+  button.danger:hover { background: var(--err-soft); border-color: var(--err); }
+  button.primary { color: #fff; border-color: transparent;
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    box-shadow: 0 3px 12px rgba(59, 130, 246, .34); }
+  button.primary:hover { filter: brightness(1.06); }
+
+  #themeBtn { padding: 7px 10px; font-size: 14px; line-height: 1; }
+
+  /* ---------- 进度条 ---------- */
+  .track {
+    height: 5px;
+    background: var(--track);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: -1px;
+  }
+
+  .fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #60a5fa, #34d399);
+    transition: width .45s cubic-bezier(.4, 0, .2, 1);
+  }
+
+  .fill.aborted { background: linear-gradient(90deg, #fbbf24, #f59e0b); }
+
+  /* ---------- 主体 ---------- */
+  main {
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: 372px 1fr;
+    min-height: 0;
+    gap: 0;
+  }
+
+  aside {
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 16px 12px 40px;
+  }
+
+  aside::-webkit-scrollbar, section::-webkit-scrollbar { width: 9px; }
+  aside::-webkit-scrollbar-thumb, section::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 5px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .step {
+    display: flex;
+    gap: 11px;
+    padding: 10px 12px;
+    border-radius: 11px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: .15s;
+  }
+
+  .step:hover { background: var(--surface); border-color: var(--border); }
+
+  .step.active {
+    background: var(--surface);
+    border-color: #c3d8ff;
+    box-shadow: 0 2px 10px rgba(59, 130, 246, .12);
+  }
+
+  [data-theme="dark"] .step.active { border-color: #2b4a6d; }
+
+  .step.selected {
+    background: var(--surface);
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .icon {
+    flex: 0 0 20px;
+    width: 20px;
+    height: 20px;
+    margin-top: 1px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 10px;
+    font-weight: 700;
+    border: 1.5px solid var(--dimmer);
+    color: var(--dimmer);
+    background: var(--surface);
+  }
+
+  .step[data-status="done"] .icon     { border-color: #86d3a3; color: var(--accent); background: var(--accent-soft); }
+  .step[data-status="running"] .icon  { border-color: var(--run); color: var(--run); background: var(--run-soft); animation: pulse 1.4s ease-in-out infinite; }
+  .step[data-status="failed"] .icon   { border-color: #f0a7a7; color: var(--err); background: var(--err-soft); }
+  .step[data-status="canceled"] .icon { border-color: var(--warn-border); color: var(--warn); background: var(--warn-soft); }
+
+  .meta { min-width: 0; flex: 1; }
+
+  .label {
+    font-size: 13px;
+    color: var(--dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .step[data-status="running"] .label { color: var(--fg); font-weight: 600; }
+  .step[data-status="done"] .label    { color: var(--fg); }
+  .step[data-status="failed"] .label  { color: var(--err); font-weight: 600; }
+  .step[data-status="canceled"] .label { color: var(--warn); }
+
+  .sub {
+    font-size: 11px;
+    color: var(--dimmer);
+    font-family: var(--mono);
+    margin-top: 2px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .badge {
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    border: 1px dashed var(--border-strong);
+    color: var(--dimmer);
+    letter-spacing: .3px;
+  }
+
+  /* ---------- 详情 ---------- */
+  section {
+    overflow-y: auto;
+    padding: 24px 30px 60px;
+    min-width: 0;
+  }
+
+  .detail-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .detail-title { font-size: 15px; font-weight: 650; }
+
+  .tag {
+    font-size: 11px;
+    font-family: var(--mono);
+    padding: 3px 9px;
+    border-radius: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--dim);
+  }
+
+  pre {
+    margin: 0;
+    padding: 18px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    word-break: break-word;
+    min-height: 130px;
+    color: var(--code-fg);
+    box-shadow: var(--shadow);
+  }
+
+  .ln-add { color: var(--accent); }
+  .ln-del { color: var(--err); }
+  .ln-ctx { color: var(--dimmer); }
+
+  .caret {
+    display: inline-block;
+    width: 7px;
+    height: 15px;
+    border-radius: 1px;
+    background: var(--run);
+    vertical-align: -2px;
+    animation: blink 1s step-end infinite;
+  }
+
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ---------- 人工介入 ---------- */
+  .gate {
+    margin-top: 18px;
+    padding: 20px 22px;
+    border-radius: var(--radius);
+    border: 1px solid var(--warn-border);
+    background: var(--warn-soft);
+    box-shadow: var(--shadow);
+  }
+
+  .gate h3 {
+    margin: 0 0 6px;
+    font-size: 14.5px;
+    color: var(--warn);
+    font-weight: 650;
+  }
+
+  .gate p { margin: 0 0 16px; font-size: 13px; color: var(--dim); }
+  .gate .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  .gate .countdown {
+    margin-top: 14px;
+    font-size: 11.5px;
+    color: var(--dimmer);
+    font-family: var(--mono);
+  }
+
+  /* ---------- 成本归因 ---------- */
+  .attr {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px 26px;
+    box-shadow: var(--shadow);
+  }
+
+  .attr h3 { margin: 0 0 5px; font-size: 16px; }
+  .attr .sub2 { margin: 0 0 22px; font-size: 12.5px; color: var(--dim); }
+
+  .attr-row {
+    display: grid;
+    grid-template-columns: 190px 1fr 78px;
+    gap: 14px;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .attr-row:last-of-type { border-bottom: 0; }
+
+  .attr-name {
+    font-size: 12.5px;
+    color: var(--dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .attr-track { height: 9px; background: var(--track); border-radius: 5px; overflow: hidden; }
+  .attr-bar { height: 100%; border-radius: 5px; background: var(--bar); }
+
+  .attr-row.top .attr-bar {
+    background: linear-gradient(90deg, #fbbf24, #f59e0b);
+  }
+  .attr-row.top .attr-name { color: var(--warn); font-weight: 650; }
+
+  .attr-val {
+    text-align: right;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--dim);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .attr-total {
+    margin: 20px 0 0;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--dim);
+    line-height: 1.85;
+  }
+
+  .attr-total b { color: var(--fg); }
+
+  /* ---------- 底栏 ---------- */
+  footer {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    padding: 12px 26px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    font-size: 12px;
+    color: var(--dim);
+    font-variant-numeric: tabular-nums;
+  }
+
+  footer b { color: var(--fg); font-weight: 650; }
+  footer .save { color: var(--accent); }
+
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: 78px;
+    transform: translateX(-50%) translateY(14px);
+    padding: 12px 22px;
+    border-radius: 11px;
+    background: var(--surface);
+    border: 1px solid var(--warn-border);
+    color: var(--warn);
+    font-size: 13px;
+    font-weight: 550;
+    opacity: 0;
+    pointer-events: none;
+    transition: .26s;
+    white-space: nowrap;
+    z-index: 20;
+    box-shadow: 0 8px 28px rgba(18, 38, 72, .16);
+  }
+
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; grid-template-rows: 230px 1fr; }
+    aside { border-right: 0; border-bottom: 1px solid var(--border); }
+    .attr-row { grid-template-columns: 118px 1fr 66px; }
+    .brand span { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="bar">
+    <div class="brand"><span class="mark">✦</span>Progress Viz<span>· Starscout</span></div>
+    <div class="spacer"></div>
+
+    <div class="pill" id="status"><span class="dot"></span><span id="statusText">准备中</span></div>
+
+    <div class="metric"><b id="elapsed">0.0</b><i>s</i></div>
+    <div class="metric"><b id="tokens">0</b><i>token</i></div>
+
+    <button id="pauseBtn">暂停</button>
+    <button id="abortBtn" class="danger">中断</button>
+    <button id="replayBtn">重放</button>
+    <button id="themeBtn" title="切换深浅色">◐</button>
+  </div>
+  <div class="track"><div class="fill" id="fill"></div></div>
+</header>
+
+<main>
+  <aside id="timeline"></aside>
+  <section id="detail">
+    <div class="detail-head">
+      <div class="detail-title" id="dTitle">等待开始</div>
+      <div class="tag" id="dTag">idle</div>
+    </div>
+    <pre id="dBody">这个原型只渲染假事件流，不调用任何模型 —— 所以它本身 0 token。
+真实版本里，这些事件来自 SSE 拦截层，同样 0 token。</pre>
+  </section>
+</main>
+
+<footer>
+  <span>事件 <b id="fEvents">0/0</b></span>
+  <span>已用 <b id="fTokens">0</b> token</span>
+  <span>若现在中断可省 <b class="save" id="fSave">0</b> token</span>
+  <span class="spacer"></span>
+  <span>空格 暂停 · Esc 中断</span>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================ 事件流
+const BASE_EVENTS = [
+  { kind: 'think', label: '拆解任务', tag: 'thinking', tokens: 320, ms: 1800,
+    body: '用户报了两个现象：\n  1. 先要 3 条再要 12 条，只返回 3 条\n  2. 先要 12 条、评 10 条、再要 12 条，返回 14 条\n\n两个现象方向相反，说明不是简单的「少拿」或「多拿」，\n而是同一段逻辑的两个分支都有问题。' },
+
+  { kind: 'read', label: '读 server.py', tag: 'read_file', tokens: 900, ms: 1600,
+    body: 'starscout/server.py  ·  240 行\n\n定位到 /api/feed 处理函数：\n\n    stored = store.today_recommendations()\n    if stored:\n        return jsonify(items=stored[:k])      ← 疑点一\n    picks = rank.recommend(..., k=k)\n    items = stored + picks                    ← 疑点二' },
+
+  { kind: 'search', label: '搜索调用方', tag: 'grep', tokens: 640, ms: 1300,
+    body: 'grep -rn "/api/feed" .\n\nstarscout/templates/index.html:118   fetch(`/api/feed?k=${k}`)\nstarscout/server.py:91              @app.get("/api/feed")\ntests/test_core.py:64               self.client.get("/api/feed?k=5")\n\n关键：k 不是常量，会随着「加载更多」从小变大。' },
+
+  { kind: 'think', label: '定位根因', tag: 'thinking', tokens: 480, ms: 2000,
+    body: '两个分支的逻辑不一致：\n\n缓存命中时  → 直接返回 stored，完全不看 k\n缓存不足时  → 生成完整 k 条，再和 stored 拼接\n\n所以：\n  k=3  存 3 条\n  k=12 命中缓存 → 返回 3 条          ← 现象 1\n\n  k=12 存 12 条，评 10 条 → 剩 2 条\n  k=12 缓存「非空」→ 生成 12 条 → 拼成 14 条   ← 现象 2\n\n根因：把「缓存非空」当成了「缓存够用」。' },
+
+  { kind: 'edit', label: '改 /api/feed', tag: 'edit', tokens: 1100, ms: 1900,
+    body: '--- a/starscout/server.py\n+++ b/starscout/server.py\n@@ -91,9 +91,11 @@ def feed():\n     stored = store.today_recommendations(store.today())\n-    if stored:\n-        return jsonify(items=stored[:k])\n-    picks = rank.recommend(repos, w, vec, k=k)\n-    items = stored + [p for p in picks if p["id"] not in seen]\n-    return jsonify(items=items)\n+    need = max(0, k - len(stored))\n+    if need:\n+        picks = rank.recommend(repos, w, vec, k=need)\n+        stored += [p for p in picks if p["id"] not in seen]\n+    return jsonify(items=stored[:k])' },
+
+  { kind: 'test', label: '运行测试', tag: 'bash', tokens: 1500, ms: 2100, failed: true,
+    body: '$ python -m unittest discover -s tests\n\nFAIL: test_feed_returns_cards\n  AssertionError: 3 != 5\n\nFAIL: test_feed_after_rating\n  AssertionError: 14 != 12\n\nRan 20 tests in 3.9s\nFAILED (failures=2)' },
+
+  { kind: 'think', label: '分析失败', tag: 'thinking', tokens: 520, ms: 1800,
+    body: '两条测试断言的其实是「旧 bug 的行为」——\n它们把「先要 3 条只返回 3 条」写成了期望值。\n\n这不是回归，是测试在保护 bug。\n需要改断言，同时新增一条「不能超过 k」的用例。' },
+
+  { kind: 'edit', label: '更新测试', tag: 'edit', tokens: 880, ms: 1700,
+    body: '--- a/tests/test_core.py\n+++ b/tests/test_core.py\n@@ -64,7 +64,18 @@\n-    items = self.client.get("/api/feed?k=5").get_json()["items"]\n-    self.assertEqual(len(items), 5)\n+    first = self.client.get("/api/feed?k=3").get_json()["items"]\n+    self.assertEqual(len(first), 3)\n+    second = self.client.get("/api/feed?k=12").get_json()["items"]\n+    self.assertEqual(len(second), 12)\n+    self.assertLessEqual(len(second), 12)' },
+
+  { kind: 'test', label: '重跑测试', tag: 'bash', tokens: 1400, ms: 1800,
+    body: '$ python -m unittest discover -s tests\n\n...............................................\n\nRan 49 tests in 4.2s\nOK' },
+
+  { kind: 'commit', label: '提交', tag: 'bash', tokens: 300, ms: 1100,
+    body: '$ git commit -m "fix: top up feed to exactly k"\n\n[main 58a82e3] fix: top up feed to exactly k\n 3 files changed, 41 insertions(+), 12 deletions(-)' },
+
+  { kind: 'done', label: '完成', tag: 'done', tokens: 200, ms: 700,
+    body: '结论：\n\n  缓存命中时按「差额」补齐，最后统一截到 k\n  旧测试断言的是 bug 行为，已更新并新增边界用例\n\n  49 个测试通过，改动已推送。' },
+];
+
+const INJECTED_EVENTS = [
+  { kind: 'think', label: '按人工提示调整', tag: 'thinking', tokens: 180, ms: 1300,
+    body: '人工干预：不要自己去猜测试为什么挂，先看断言写的是什么。\n\n→ 两条断言断言的确实是旧 bug 行为。改为新行为，并补边界用例。' },
+  { kind: 'edit', label: '改测试断言', tag: 'edit', tokens: 620, ms: 1500,
+    body: '--- a/tests/test_core.py\n+++ b/tests/test_core.py\n@@ -64,7 +64,14 @@\n-    items = self.client.get("/api/feed?k=5").get_json()["items"]\n-    self.assertEqual(len(items), 5)\n+    first  = self.client.get("/api/feed?k=3").get_json()["items"]\n+    second = self.client.get("/api/feed?k=12").get_json()["items"]\n+    self.assertEqual(len(first), 3)\n+    self.assertEqual(len(second), 12)\n+    self.assertLessEqual(len(second), 12)' },
+];
+
+const GATE_TIMEOUT = 8;
+
+// ============================================================ 状态
+const $ = id => document.getElementById(id);
+
+const state = {
+  events: [], idx: 0, tokens: 0, done: 0,
+  running: false, paused: false, aborted: false,
+  elapsed: 0, runId: 0, autoScroll: true, gateResolve: null,
+};
+
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+function renderBody(text) {
+  return text.split('\n').map(line => {
+    if (line.startsWith('+')) return `<span class="ln-add">${esc(line)}</span>`;
+    if (line.startsWith('-')) return `<span class="ln-del">${esc(line)}</span>`;
+    if (line.startsWith('@@') || line.startsWith('---') || line.startsWith('+++'))
+      return `<span class="ln-ctx">${esc(line)}</span>`;
+    return esc(line);
+  }).join('\n');
+}
+
+const ICONS = { done: '✓', running: '●', failed: '✕', canceled: '⊘', pending: '·' };
+
+// ============================================================ 时间轴
+function buildTimeline() {
+  const el = $('timeline');
+  el.innerHTML = '';
+  state.events.forEach((ev, i) => {
+    const d = document.createElement('div');
+    d.className = 'step';
+    d.dataset.i = i;
+    d.dataset.kind = ev.kind;
+    const st = ev.status || 'pending';
+    d.dataset.status = st;
+    d.innerHTML = `
+      <div class="icon">${ICONS[st]}</div>
+      <div class="meta">
+        <div class="label">${esc(ev.label)}</div>
+        <div class="sub">${esc(ev.tag)}${ev.kind === 'think' ? '<span class="badge">摘要</span>' : ''}<span class="dur"></span></div>
+      </div>`;
+    d.addEventListener('click', () => inspect(i));
+    el.appendChild(d);
+  });
+}
+
+function setStatus(i, status) {
+  const ev = state.events[i];
+  if (!ev) return;
+  ev.status = status;
+  const d = $('timeline').querySelector(`[data-i="${i}"]`);
+  if (!d) return;
+  d.dataset.status = status;
+  d.querySelector('.icon').textContent = ICONS[status];
+  d.classList.toggle('active', status === 'running');
+  if (status === 'running') d.scrollIntoView({ block: 'nearest' });
+}
+
+function setDuration(i) {
+  const d = $('timeline').querySelector(`[data-i="${i}"]`);
+  const ev = state.events[i];
+  if (!d || !ev) return;
+  const slot = d.querySelector('.dur');
+  if (slot) slot.textContent = ` · ${(ev.ms / 1000).toFixed(1)}s`;
+}
+
+// ============================================================ 详情
+function stickToBottom() {
+  if (!state.autoScroll) return;
+  const s = $('detail');
+  s.scrollTop = s.scrollHeight;
+}
+
+$('detail').addEventListener('scroll', e => {
+  const s = e.target;
+  state.autoScroll = s.scrollHeight - s.scrollTop - s.clientHeight < 48;
+});
+
+function ensureShell() {
+  const s = $('detail');
+  if (!document.getElementById('dBody')) {
+    s.innerHTML = `
+      <div class="detail-head">
+        <div class="detail-title" id="dTitle"></div>
+        <div class="tag" id="dTag"></div>
+      </div>
+      <pre id="dBody"></pre>`;
+  }
+  const gate = s.querySelector('.gate');
+  if (gate) gate.remove();
+  const attr = s.querySelector('.attr');
+  if (attr) attr.remove();
+}
+
+function inspect(i) {
+  const ev = state.events[i];
+  if (!ev) return;
+  state.autoScroll = true;
+  ensureShell();
+  $('timeline').querySelectorAll('.step').forEach(s => s.classList.remove('selected'));
+  const node = $('timeline').querySelector(`[data-i="${i}"]`);
+  if (node) node.classList.add('selected');
+  $('dTitle').textContent = ev.label;
+  $('dTag').textContent = ev.tag;
+  $('dBody').innerHTML = renderBody(ev.body);
+}
+
+// ============================================================ 统计
+function totalTokens() {
+  return state.events.reduce((a, e) => a + e.tokens, 0);
+}
+
+function remainingTokens() {
+  return state.events.slice(state.idx + 1).reduce((a, e) => a + e.tokens, 0);
+}
+
+function updateStats() {
+  $('tokens').textContent = state.tokens.toLocaleString();
+  $('fTokens').textContent = state.tokens.toLocaleString();
+  $('fEvents').textContent = `${state.done}/${state.events.length}`;
+  $('fSave').textContent = (state.aborted ? 0 : remainingTokens()).toLocaleString();
+  $('fill').style.width = `${(state.done / Math.max(1, state.events.length)) * 100}%`;
+  $('fill').classList.toggle('aborted', state.aborted);
+}
+
+function setPill(cls, text) {
+  $('status').className = 'pill' + (cls ? ' ' + cls : '');
+  $('statusText').textContent = text;
+}
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+function wait(ms) {
+  return new Promise(resolve => {
+    let left = ms;
+    const iv = setInterval(() => {
+      if (state.aborted) { clearInterval(iv); resolve(); return; }
+      if (!state.paused) left -= 16;
+      if (left <= 0) { clearInterval(iv); resolve(); }
+    }, 16);
+  });
+}
+
+async function streamInto(el, text) {
+  const chars = [...text];
+  let shown = 0;
+  const chunk = Math.max(1, Math.ceil(chars.length / 90));
+  while (shown < chars.length) {
+    if (state.aborted) return;
+    if (!state.paused) {
+      shown = Math.min(chars.length, shown + chunk);
+      el.innerHTML = renderBody(chars.slice(0, shown).join('')) + '<span class="caret"></span>';
+      stickToBottom();
+    }
+    await wait(16);
+  }
+  el.innerHTML = renderBody(text);
+  stickToBottom();
+}
+
+// ============================================================ 人工介入
+function askGate(ev) {
+  return new Promise(resolve => {
+    state.gateResolve = () => finish('abort');
+
+    const leftSteps = state.events.length - (state.idx + 1);
+    const leftTokens = state.events.slice(state.idx + 1).reduce((a, e) => a + e.tokens, 0);
+
+    const gate = document.createElement('div');
+    gate.className = 'gate';
+    gate.innerHTML = `
+      <h3>测试失败了 —— 现在由你决定</h3>
+      <p>后面还有 ${leftSteps} 步要跑，合计 ${leftTokens.toLocaleString()} token。你怎么选，直接决定这笔钱花不花。</p>
+      <div class="actions">
+        <button class="primary" data-choice="edit">改指令重跑</button>
+        <button data-choice="continue">让它自己想</button>
+        <button class="danger" data-choice="abort">停在这里</button>
+      </div>
+      <div class="countdown"></div>`;
+
+    $('detail').appendChild(gate);
+    stickToBottom();
+
+    let left = GATE_TIMEOUT;
+    const cd = gate.querySelector('.countdown');
+    const render = () => { cd.textContent = `${left}s 后自动选择「让它自己想」`; };
+    render();
+
+    const iv = setInterval(() => {
+      left -= 1;
+      if (left <= 0) { finish('continue'); return; }
+      render();
+    }, 1000);
+
+    function finish(choice) {
+      clearInterval(iv);
+      gate.remove();
+      state.gateResolve = null;
+      resolve(choice);
+    }
+
+    gate.querySelectorAll('button[data-choice]').forEach(b => {
+      b.addEventListener('click', () => finish(b.dataset.choice));
+    });
+  });
+}
+
+// ============================================================ 成本归因
+function showAttribution() {
+  const rows = state.events
+    .filter(e => e.tokens > 0)
+    .map(e => ({ label: e.label, tokens: e.tokens, kind: e.kind }))
+    .sort((a, b) => b.tokens - a.tokens);
+
+  const total = rows.reduce((a, r) => a + r.tokens, 0);
+  const max = rows[0] ? rows[0].tokens : 1;
+  const io = rows.filter(r => r.kind === 'read' || r.kind === 'test').reduce((a, r) => a + r.tokens, 0);
+  const think = rows.filter(r => r.kind === 'think').reduce((a, r) => a + r.tokens, 0);
+
+  const box = document.createElement('div');
+  box.className = 'attr';
+  box.innerHTML = `
+    <h3>钱花在哪了</h3>
+    <p class="sub2">总共 ${total.toLocaleString()} token。前 3 项占 ${(
+      rows.slice(0, 3).reduce((a, r) => a + r.tokens, 0) / total * 100
+    ).toFixed(0)}%。</p>
+    ${rows.map((r, i) => `
+      <div class="attr-row ${i === 0 ? 'top' : ''}">
+        <div class="attr-name">${esc(r.label)}</div>
+        <div class="attr-track"><div class="attr-bar" style="width:${(r.tokens / max * 100).toFixed(1)}%"></div></div>
+        <div class="attr-val">${r.tokens.toLocaleString()}</div>
+      </div>`).join('')}
+    <p class="attr-total">读文件 + 跑测试 = <b>${io.toLocaleString()}</b> token，
+      是模型思考的 <b>${(io / Math.max(1, think)).toFixed(1)}</b> 倍。<br>
+      真正该优化的是这里，不是让模型少想。</p>`;
+
+  $('detail').innerHTML = '';
+  $('detail').appendChild(box);
+  state.autoScroll = false;
+}
+
+// ============================================================ 主循环
+async function run() {
+  const myId = ++state.runId;
+  const alive = () => myId === state.runId;
+
+  state.events = BASE_EVENTS.map(e => ({ ...e, status: 'pending' }));
+  state.idx = 0;
+  state.tokens = 0;
+  state.done = 0;
+  state.aborted = false;
+  state.paused = false;
+  state.elapsed = 0;
+  state.running = true;
+  state.autoScroll = true;
+
+  buildTimeline();
+  setPill('running', '进行中');
+  $('elapsed').textContent = '0.0';
+  $('pauseBtn').disabled = false;
+  $('abortBtn').disabled = false;
+  $('pauseBtn').textContent = '暂停';
+  updateStats();
+
+  const timer = setInterval(() => {
+    if (!alive()) { clearInterval(timer); return; }
+    if (!state.paused && !state.aborted) state.elapsed += 0.1;
+    $('elapsed').textContent = state.elapsed.toFixed(1);
+  }, 100);
+
+  for (let i = 0; i < state.events.length; i++) {
+    if (!alive()) return;
+    if (state.aborted) break;
+
+    state.idx = i;
+    const ev = state.events[i];
+
+    setStatus(i, 'running');
+    inspect(i);
+    await streamInto($('dBody'), ev.body);
+    if (!alive()) return;
+    if (state.aborted) { setStatus(i, 'canceled'); break; }
+
+    await wait(100);
+    if (!alive()) return;
+
+    setStatus(i, ev.failed ? 'failed' : 'done');
+    setDuration(i);
+    state.done = i + 1;
+    state.tokens += ev.tokens;
+    updateStats();
+
+    if (ev.failed) {
+      const choice = await askGate(ev);
+      if (!alive()) return;
+
+      if (choice === 'abort') { state.aborted = true; break; }
+
+      if (choice === 'edit') {
+        state.events.splice(i + 1, 2, ...INJECTED_EVENTS.map(e => ({ ...e, status: 'pending' })));
+        buildTimeline();
+        state.done = i + 1;
+        updateStats();
+        toast('已插入人工指令，后面的步骤按你的方向走');
+      } else {
+        toast('继续。如果它猜错了，你会在这里再看到一次');
+      }
+    }
+  }
+
+  clearInterval(timer);
+  if (!alive()) return;
+  state.running = false;
+  $('pauseBtn').disabled = true;
+  $('abortBtn').disabled = true;
+
+  if (state.aborted) {
+    setPill('aborted', '已中断');
+    toast(`已中断 · 省下 ${remainingTokens().toLocaleString()} token 和后续所有工具调用`);
+  } else {
+    setPill('done', '完成');
+    state.tokens = totalTokens();
+    updateStats();
+    setTimeout(() => { if (alive()) showAttribution(); }, 700);
+  }
+}
+
+// ============================================================ 交互
+$('pauseBtn').addEventListener('click', () => {
+  if (!state.running) return;
+  state.paused = !state.paused;
+  $('pauseBtn').textContent = state.paused ? '继续' : '暂停';
+  setPill(state.paused ? 'paused' : 'running', state.paused ? '已暂停' : '进行中');
+});
+
+$('abortBtn').addEventListener('click', () => {
+  if (!state.running) return;
+  state.aborted = true;
+  if (state.gateResolve) state.gateResolve();
+  toast('正在中断…');
+});
+
+$('replayBtn').addEventListener('click', () => {
+  state.aborted = true;
+  state.runId++;
+  setTimeout(run, 80);
+});
+
+// 主题
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem('pv-theme', t); } catch (e) {}
+  $('themeBtn').textContent = t === 'dark' ? '☀' : '◐';
+}
+try {
+  const saved = localStorage.getItem('pv-theme');
+  if (saved === 'dark' || saved === 'light') applyTheme(saved);
+} catch (e) {}
+
+$('themeBtn').addEventListener('click', () => {
+  applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+});
+
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); $('pauseBtn').click(); }
+  if (e.code === 'Escape') { $('abortBtn').click(); }
+});
+
+state.events = BASE_EVENTS.map(e => ({ ...e, status: 'pending' }));
+buildTimeline();
+updateStats();
+setTimeout(run, 500);
+</script>
+</body>
+</html>
